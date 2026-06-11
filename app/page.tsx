@@ -11,7 +11,7 @@ export default function Home() {
       }}
     >
       <h1>Referent</h1>
-      <p>Минимальное приложение на Next.js</p>
+      <p>Я изучаю Next.js</p>
     </main>
   );
 }
