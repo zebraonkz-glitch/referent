@@ -1,4 +1,5 @@
 # Referent
+PROJECT.MD - описание проекта
 
 Минимальное приложение на [Next.js](https://nextjs.org).
 
