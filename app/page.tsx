@@ -1,17 +1,9 @@
+import { ReferentForm } from "./components/referent-form";
+
 export default function Home() {
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column",
-        gap: "0.5rem",
-      }}
-    >
-      <h1>Referent</h1>
-      <p>Я изучаю Next.js</p>
+    <main className="min-h-screen px-4 py-10 sm:px-6 sm:py-16">
+      <ReferentForm />
     </main>
   );
 }
