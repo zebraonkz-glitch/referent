@@ -1,3 +1,4 @@
+import { fetchAndParseArticle } from "@/lib/parse-article";
 import { NextRequest, NextResponse } from "next/server";
 
 type Action = "summary" | "theses" | "telegram";
@@ -32,13 +33,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Некорректный URL" }, { status: 400 });
   }
 
-  // Заглушка до подключения парсинга и AI
-  const result = [
-    `Действие: ${actionTitles[action]}`,
-    `Статья: ${url}`,
-    "",
-    "Интерфейс готов. Следующий шаг — подключить парсинг статьи и AI-генерацию ответа.",
-  ].join("\n");
+  try {
+    const parsed = await fetchAndParseArticle(url);
+    const result = JSON.stringify(parsed, null, 2);
 
-  return NextResponse.json({ result });
+    return NextResponse.json({
+      parsed,
+      result,
+      action: actionTitles[action],
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Не удалось обработать статью";
+
+    return NextResponse.json({ error: message }, { status: 422 });
+  }
 }

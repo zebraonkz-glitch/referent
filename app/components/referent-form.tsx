@@ -4,6 +4,18 @@ import { useState } from "react";
 
 type Action = "summary" | "theses" | "telegram";
 
+type ParsedArticle = {
+  date: string | null;
+  title: string | null;
+  content: string | null;
+};
+
+type AnalyzeResponse = {
+  parsed?: ParsedArticle;
+  result?: string;
+  error?: string;
+};
+
 const actions: { id: Action; label: string; description: string }[] = [
   {
     id: "summary",
@@ -22,10 +34,14 @@ const actions: { id: Action; label: string; description: string }[] = [
   },
 ];
 
+function formatParsedJson(parsed: ParsedArticle): string {
+  return JSON.stringify(parsed, null, 2);
+}
+
 export function ReferentForm() {
   const [url, setUrl] = useState("");
   const [activeAction, setActiveAction] = useState<Action | null>(null);
-  const [result, setResult] = useState("");
+  const [parsed, setParsed] = useState<ParsedArticle | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -34,7 +50,7 @@ export function ReferentForm() {
 
     if (!trimmedUrl) {
       setError("Введите URL англоязычной статьи");
-      setResult("");
+      setParsed(null);
       return;
     }
 
@@ -42,14 +58,14 @@ export function ReferentForm() {
       new URL(trimmedUrl);
     } catch {
       setError("Укажите корректный URL, например https://example.com/article");
-      setResult("");
+      setParsed(null);
       return;
     }
 
     setError("");
     setActiveAction(action);
     setIsLoading(true);
-    setResult("");
+    setParsed(null);
 
     try {
       const response = await fetch("/api/analyze", {
@@ -58,22 +74,27 @@ export function ReferentForm() {
         body: JSON.stringify({ url: trimmedUrl, action }),
       });
 
-      const data = (await response.json()) as { result?: string; error?: string };
+      const data = (await response.json()) as AnalyzeResponse;
 
       if (!response.ok) {
         throw new Error(data.error ?? "Не удалось обработать статью");
       }
 
-      setResult(data.result ?? "");
+      if (!data.parsed) {
+        throw new Error("Сервер не вернул данные статьи");
+      }
+
+      setParsed(data.parsed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Произошла ошибка");
-      setResult("");
+      setParsed(null);
     } finally {
       setIsLoading(false);
     }
   }
 
   const activeLabel = actions.find((item) => item.id === activeAction)?.label;
+  const jsonResult = parsed ? formatParsedJson(parsed) : "";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
@@ -85,7 +106,7 @@ export function ReferentForm() {
           Анализ англоязычных статей
         </h1>
         <p className="text-slate-400">
-          Вставьте ссылку на статью и выберите, какой результат нужен
+          Вставьте ссылку на статью и выберите действие — сначала покажем распарсенные данные
         </p>
       </header>
 
@@ -138,14 +159,40 @@ export function ReferentForm() {
           {isLoading ? (
             <div className="flex h-full min-h-36 flex-col items-center justify-center gap-3 text-slate-400">
               <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400" />
-              <p>Генерируем ответ...</p>
+              <p>Парсим статью...</p>
             </div>
-          ) : result ? (
-            <div className="whitespace-pre-wrap text-sm leading-7 text-slate-200">{result}</div>
+          ) : parsed ? (
+            <div className="space-y-5">
+              <dl className="grid gap-3 text-sm">
+                <div>
+                  <dt className="font-medium text-sky-300">date</dt>
+                  <dd className="mt-1 text-slate-200">{parsed.date ?? "null"}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-sky-300">title</dt>
+                  <dd className="mt-1 text-slate-200">{parsed.title ?? "null"}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-sky-300">content</dt>
+                  <dd className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap text-slate-200">
+                    {parsed.content ?? "null"}
+                  </dd>
+                </div>
+              </dl>
+
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  JSON
+                </p>
+                <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900 p-4 font-mono text-sm leading-7 text-slate-200">
+                  {jsonResult}
+                </pre>
+              </div>
+            </div>
           ) : (
             <p className="text-sm leading-7 text-slate-500">
-              Здесь появится результат после выбора действия: краткое описание статьи,
-              тезисы или пост для Telegram.
+              Введите URL и нажмите любую кнопку — здесь появятся поля date, title, content
+              и JSON с результатом парсинга.
             </p>
           )}
         </div>
