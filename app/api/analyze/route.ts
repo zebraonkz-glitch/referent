@@ -1,12 +1,14 @@
 import { fetchAndParseArticle } from "@/lib/parse-article";
+import { translateArticle } from "@/lib/translate-article";
 import { NextRequest, NextResponse } from "next/server";
 
-type Action = "summary" | "theses" | "telegram";
+type Action = "summary" | "theses" | "telegram" | "translate";
 
 const actionTitles: Record<Action, string> = {
   summary: "О чем статья?",
   theses: "Тезисы",
   telegram: "Пост для Telegram",
+  translate: "Перевод",
 };
 
 export async function POST(request: NextRequest) {
@@ -35,11 +37,24 @@ export async function POST(request: NextRequest) {
 
   try {
     const parsed = await fetchAndParseArticle(url);
+
+    if (action === "translate") {
+      const translation = await translateArticle(parsed);
+
+      return NextResponse.json({
+        parsed,
+        result: translation,
+        mode: "translation",
+        action: actionTitles[action],
+      });
+    }
+
     const result = JSON.stringify(parsed, null, 2);
 
     return NextResponse.json({
       parsed,
       result,
+      mode: "parsed",
       action: actionTitles[action],
     });
   } catch (error) {

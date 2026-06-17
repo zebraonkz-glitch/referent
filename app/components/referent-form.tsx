@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type Action = "summary" | "theses" | "telegram";
+type Action = "summary" | "theses" | "telegram" | "translate";
 
 type ParsedArticle = {
   date: string | null;
@@ -10,9 +10,12 @@ type ParsedArticle = {
   content: string | null;
 };
 
+type ResultMode = "parsed" | "translation";
+
 type AnalyzeResponse = {
   parsed?: ParsedArticle;
   result?: string;
+  mode?: ResultMode;
   error?: string;
 };
 
@@ -32,6 +35,11 @@ const actions: { id: Action; label: string; description: string }[] = [
     label: "Пост для Telegram",
     description: "Готовый пост для публикации в Telegram",
   },
+  {
+    id: "translate",
+    label: "Перевод",
+    description: "Перевод статьи на русский через DeepSeek",
+  },
 ];
 
 function formatParsedJson(parsed: ParsedArticle): string {
@@ -42,6 +50,8 @@ export function ReferentForm() {
   const [url, setUrl] = useState("");
   const [activeAction, setActiveAction] = useState<Action | null>(null);
   const [parsed, setParsed] = useState<ParsedArticle | null>(null);
+  const [resultText, setResultText] = useState("");
+  const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -51,6 +61,8 @@ export function ReferentForm() {
     if (!trimmedUrl) {
       setError("Введите URL англоязычной статьи");
       setParsed(null);
+      setResultText("");
+      setResultMode(null);
       return;
     }
 
@@ -59,6 +71,8 @@ export function ReferentForm() {
     } catch {
       setError("Укажите корректный URL, например https://example.com/article");
       setParsed(null);
+      setResultText("");
+      setResultMode(null);
       return;
     }
 
@@ -66,6 +80,8 @@ export function ReferentForm() {
     setActiveAction(action);
     setIsLoading(true);
     setParsed(null);
+    setResultText("");
+    setResultMode(null);
 
     try {
       const response = await fetch("/api/analyze", {
@@ -80,21 +96,37 @@ export function ReferentForm() {
         throw new Error(data.error ?? "Не удалось обработать статью");
       }
 
+      if (data.mode === "translation") {
+        if (!data.result) {
+          throw new Error("Сервер не вернул перевод");
+        }
+
+        setResultMode("translation");
+        setResultText(data.result);
+        setParsed(data.parsed ?? null);
+        return;
+      }
+
       if (!data.parsed) {
         throw new Error("Сервер не вернул данные статьи");
       }
 
+      setResultMode("parsed");
       setParsed(data.parsed);
+      setResultText(data.result ?? formatParsedJson(data.parsed));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Произошла ошибка");
       setParsed(null);
+      setResultText("");
+      setResultMode(null);
     } finally {
       setIsLoading(false);
     }
   }
 
   const activeLabel = actions.find((item) => item.id === activeAction)?.label;
-  const jsonResult = parsed ? formatParsedJson(parsed) : "";
+  const loadingText =
+    activeAction === "translate" ? "Переводим статью..." : "Парсим статью...";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
@@ -106,7 +138,7 @@ export function ReferentForm() {
           Анализ англоязычных статей
         </h1>
         <p className="text-slate-400">
-          Вставьте ссылку на статью и выберите действие — сначала покажем распарсенные данные
+          Вставьте ссылку на статью и выберите действие
         </p>
       </header>
 
@@ -123,7 +155,7 @@ export function ReferentForm() {
           className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30"
         />
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {actions.map((action) => (
             <button
               key={action.id}
@@ -159,9 +191,13 @@ export function ReferentForm() {
           {isLoading ? (
             <div className="flex h-full min-h-36 flex-col items-center justify-center gap-3 text-slate-400">
               <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400" />
-              <p>Парсим статью...</p>
+              <p>{loadingText}</p>
             </div>
-          ) : parsed ? (
+          ) : resultMode === "translation" && resultText ? (
+            <div className="whitespace-pre-wrap text-sm leading-7 text-slate-200">
+              {resultText}
+            </div>
+          ) : resultMode === "parsed" && parsed ? (
             <div className="space-y-5">
               <dl className="grid gap-3 text-sm">
                 <div>
@@ -185,14 +221,14 @@ export function ReferentForm() {
                   JSON
                 </p>
                 <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900 p-4 font-mono text-sm leading-7 text-slate-200">
-                  {jsonResult}
+                  {resultText}
                 </pre>
               </div>
             </div>
           ) : (
             <p className="text-sm leading-7 text-slate-500">
-              Введите URL и нажмите любую кнопку — здесь появятся поля date, title, content
-              и JSON с результатом парсинга.
+              Введите URL и нажмите кнопку. Для перевода выберите «Перевод» — текст
+              появится здесь на русском языке.
             </p>
           )}
         </div>
