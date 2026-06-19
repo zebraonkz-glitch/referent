@@ -51,7 +51,7 @@ const actionPrompts: Record<ArticleAction, ActionPrompt> = {
       "First line: short catchy title without # symbols.",
       "Then 1–3 short paragraphs.",
       "You may use 0–2 relevant emojis, not more.",
-      "No markdown headings (#, ##). No links unless they are in the original.",
+      "No markdown headings (#, ##). Do not add links or source URL — the link will be appended automatically.",
       "Return only the post text, ready to publish.",
     ].join(" "),
     user: [
@@ -88,30 +88,44 @@ function normalizeTheses(text: string): string {
     .join("\n");
 }
 
-function normalizeTelegramPost(text: string): string {
-  const trimmed = text.trim();
+function appendTelegramSource(post: string, sourceUrl: string): string {
+  const trimmed = post.trim();
 
-  if (trimmed.length <= 1500) {
+  if (trimmed.includes(sourceUrl)) {
     return trimmed;
   }
 
-  const cut = trimmed.slice(0, 1497).trimEnd();
-  const lastSpace = cut.lastIndexOf(" ");
-
-  if (lastSpace > 1200) {
-    return `${cut.slice(0, lastSpace)}…`;
-  }
-
-  return `${cut}…`;
+  return `${trimmed}\n\nИсточник: ${sourceUrl}`;
 }
 
-function normalizeResponse(action: ArticleAction, text: string): string {
+function normalizeTelegramPost(text: string, sourceUrl?: string): string {
+  const footer = sourceUrl ? `\n\nИсточник: ${sourceUrl}` : "";
+  const maxBodyLength = Math.max(500, 1500 - footer.length);
+  const trimmed = text.trim();
+
+  if (trimmed.length <= maxBodyLength) {
+    return sourceUrl ? appendTelegramSource(trimmed, sourceUrl) : trimmed;
+  }
+
+  const cut = trimmed.slice(0, maxBodyLength).trimEnd();
+  const lastSpace = cut.lastIndexOf(" ");
+  const body =
+    lastSpace > maxBodyLength * 0.7 ? `${cut.slice(0, lastSpace).trimEnd()}…` : `${cut}…`;
+
+  return sourceUrl ? appendTelegramSource(body, sourceUrl) : body;
+}
+
+function normalizeResponse(
+  action: ArticleAction,
+  text: string,
+  sourceUrl?: string,
+): string {
   if (action === "theses") {
     return normalizeTheses(text);
   }
 
   if (action === "telegram") {
-    return normalizeTelegramPost(text);
+    return normalizeTelegramPost(text, sourceUrl);
   }
 
   return text.trim();
@@ -120,6 +134,7 @@ function normalizeResponse(action: ArticleAction, text: string): string {
 export async function generateArticleAction(
   article: ParsedArticle,
   action: ArticleAction,
+  options?: { sourceUrl?: string },
 ): Promise<string> {
   validateArticleContent(article);
 
@@ -131,5 +146,5 @@ export async function generateArticleAction(
     { role: "user", content: `${user}\n\n${articleText}` },
   ]);
 
-  return normalizeResponse(action, raw);
+  return normalizeResponse(action, raw, options?.sourceUrl);
 }

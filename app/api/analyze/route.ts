@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (isGeneratedAction(action)) {
-      const generated = await generateArticleAction(parsed, action);
+      const generated = await generateArticleAction(parsed, action, {
+        sourceUrl: action === "telegram" ? url : undefined,
+      });
 
       return NextResponse.json({
         result: generated,
