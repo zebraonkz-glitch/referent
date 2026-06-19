@@ -4,16 +4,9 @@ import { useState } from "react";
 
 type Action = "summary" | "theses" | "telegram" | "translate";
 
-type ParsedArticle = {
-  date: string | null;
-  title: string | null;
-  content: string | null;
-};
-
-type ResultMode = "parsed" | "translation";
+type ResultMode = "generated" | "translation";
 
 type AnalyzeResponse = {
-  parsed?: ParsedArticle;
   result?: string;
   mode?: ResultMode;
   error?: string;
@@ -42,14 +35,16 @@ const actions: { id: Action; label: string; description: string }[] = [
   },
 ];
 
-function formatParsedJson(parsed: ParsedArticle): string {
-  return JSON.stringify(parsed, null, 2);
-}
+const loadingTexts: Record<Action, string> = {
+  summary: "Анализируем статью...",
+  theses: "Формируем тезисы...",
+  telegram: "Готовим пост...",
+  translate: "Переводим статью...",
+};
 
 export function ReferentForm() {
   const [url, setUrl] = useState("");
   const [activeAction, setActiveAction] = useState<Action | null>(null);
-  const [parsed, setParsed] = useState<ParsedArticle | null>(null);
   const [resultText, setResultText] = useState("");
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [error, setError] = useState("");
@@ -60,7 +55,6 @@ export function ReferentForm() {
 
     if (!trimmedUrl) {
       setError("Введите URL англоязычной статьи");
-      setParsed(null);
       setResultText("");
       setResultMode(null);
       return;
@@ -70,7 +64,6 @@ export function ReferentForm() {
       new URL(trimmedUrl);
     } catch {
       setError("Укажите корректный URL, например https://example.com/article");
-      setParsed(null);
       setResultText("");
       setResultMode(null);
       return;
@@ -79,7 +72,6 @@ export function ReferentForm() {
     setError("");
     setActiveAction(action);
     setIsLoading(true);
-    setParsed(null);
     setResultText("");
     setResultMode(null);
 
@@ -96,27 +88,14 @@ export function ReferentForm() {
         throw new Error(data.error ?? "Не удалось обработать статью");
       }
 
-      if (data.mode === "translation") {
-        if (!data.result) {
-          throw new Error("Сервер не вернул перевод");
-        }
-
-        setResultMode("translation");
-        setResultText(data.result);
-        setParsed(data.parsed ?? null);
-        return;
+      if (!data.result || (data.mode !== "generated" && data.mode !== "translation")) {
+        throw new Error("Сервер не вернул результат");
       }
 
-      if (!data.parsed) {
-        throw new Error("Сервер не вернул данные статьи");
-      }
-
-      setResultMode("parsed");
-      setParsed(data.parsed);
-      setResultText(data.result ?? formatParsedJson(data.parsed));
+      setResultMode(data.mode);
+      setResultText(data.result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Произошла ошибка");
-      setParsed(null);
       setResultText("");
       setResultMode(null);
     } finally {
@@ -125,8 +104,9 @@ export function ReferentForm() {
   }
 
   const activeLabel = actions.find((item) => item.id === activeAction)?.label;
-  const loadingText =
-    activeAction === "translate" ? "Переводим статью..." : "Парсим статью...";
+  const loadingText = activeAction ? loadingTexts[activeAction] : "Обрабатываем...";
+  const hasTextResult =
+    (resultMode === "generated" || resultMode === "translation") && resultText;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
@@ -193,42 +173,14 @@ export function ReferentForm() {
               <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400" />
               <p>{loadingText}</p>
             </div>
-          ) : resultMode === "translation" && resultText ? (
+          ) : hasTextResult ? (
             <div className="whitespace-pre-wrap text-sm leading-7 text-slate-200">
               {resultText}
             </div>
-          ) : resultMode === "parsed" && parsed ? (
-            <div className="space-y-5">
-              <dl className="grid gap-3 text-sm">
-                <div>
-                  <dt className="font-medium text-sky-300">date</dt>
-                  <dd className="mt-1 text-slate-200">{parsed.date ?? "null"}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-sky-300">title</dt>
-                  <dd className="mt-1 text-slate-200">{parsed.title ?? "null"}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-sky-300">content</dt>
-                  <dd className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap text-slate-200">
-                    {parsed.content ?? "null"}
-                  </dd>
-                </div>
-              </dl>
-
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                  JSON
-                </p>
-                <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900 p-4 font-mono text-sm leading-7 text-slate-200">
-                  {resultText}
-                </pre>
-              </div>
-            </div>
           ) : (
             <p className="text-sm leading-7 text-slate-500">
-              Введите URL и нажмите кнопку. Для перевода выберите «Перевод» — текст
-              появится здесь на русском языке.
+              Введите URL и нажмите кнопку — здесь появится описание статьи, тезисы,
+              пост для Telegram или перевод.
             </p>
           )}
         </div>

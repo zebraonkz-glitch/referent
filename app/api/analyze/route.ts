@@ -1,3 +1,4 @@
+import { generateArticleAction } from "@/lib/generate-article-action";
 import { fetchAndParseArticle } from "@/lib/parse-article";
 import { translateArticle } from "@/lib/translate-article";
 import { NextRequest, NextResponse } from "next/server";
@@ -10,6 +11,12 @@ const actionTitles: Record<Action, string> = {
   telegram: "Пост для Telegram",
   translate: "Перевод",
 };
+
+const generatedActions = ["summary", "theses", "telegram"] as const;
+
+function isGeneratedAction(action: Action): action is (typeof generatedActions)[number] {
+  return generatedActions.includes(action as (typeof generatedActions)[number]);
+}
 
 export async function POST(request: NextRequest) {
   let body: { url?: string; action?: Action };
@@ -42,21 +49,26 @@ export async function POST(request: NextRequest) {
       const translation = await translateArticle(parsed);
 
       return NextResponse.json({
-        parsed,
         result: translation,
         mode: "translation",
         action: actionTitles[action],
       });
     }
 
-    const result = JSON.stringify(parsed, null, 2);
+    if (isGeneratedAction(action)) {
+      const generated = await generateArticleAction(parsed, action);
 
-    return NextResponse.json({
-      parsed,
-      result,
-      mode: "parsed",
-      action: actionTitles[action],
-    });
+      return NextResponse.json({
+        result: generated,
+        mode: "generated",
+        action: actionTitles[action],
+      });
+    }
+
+    return NextResponse.json(
+      { error: "Неизвестное действие" },
+      { status: 400 },
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Не удалось обработать статью";

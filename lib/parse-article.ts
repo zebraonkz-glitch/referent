@@ -137,14 +137,27 @@ function extractContent($: cheerio.CheerioAPI): string | null {
 }
 
 export async function fetchAndParseArticle(url: string): Promise<ParsedArticle> {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml",
-    },
-    redirect: "follow",
-  });
+  const FETCH_TIMEOUT_MS = 30_000;
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      throw new Error("Превышено время ожидания загрузки страницы (30 с)");
+    }
+
+    throw new Error("Не удалось загрузить страницу. Проверьте URL и доступность сайта.");
+  }
 
   if (!response.ok) {
     throw new Error(`Не удалось загрузить страницу (${response.status})`);
@@ -160,6 +173,10 @@ export async function fetchAndParseArticle(url: string): Promise<ParsedArticle> 
     title: extractTitle($),
     content: extractContent($),
   };
+
+  if (!parsed.content?.trim()) {
+    throw new Error("Не удалось извлечь текст статьи");
+  }
 
   if (!parsed.title && !parsed.content) {
     throw new Error("Не удалось извлечь заголовок и содержимое статьи");
