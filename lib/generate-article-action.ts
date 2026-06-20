@@ -1,4 +1,5 @@
 import type { ParsedArticle } from "@/lib/parse-article";
+import { AppError } from "@/lib/app-error";
 import { buildArticlePrompt, callOpenRouter } from "@/lib/openrouter";
 
 export type ArticleAction = "summary" | "theses" | "telegram";
@@ -66,7 +67,7 @@ export function validateArticleContent(article: ParsedArticle): void {
   const content = article.content?.trim() ?? "";
 
   if (content.length < MIN_CONTENT_CHARS) {
-    throw new Error("Не удалось извлечь текст статьи");
+    throw new AppError("ARTICLE_PARSE_FAILED");
   }
 }
 

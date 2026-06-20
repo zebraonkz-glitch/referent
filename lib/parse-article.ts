@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
 
+import { AppError } from "@/lib/app-error";
+
 export type ParsedArticle = {
   date: string | null;
   title: string | null;
@@ -153,14 +155,14 @@ export async function fetchAndParseArticle(url: string): Promise<ParsedArticle> 
     });
   } catch (error) {
     if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
-      throw new Error("Превышено время ожидания загрузки страницы (30 с)");
+      throw new AppError("ARTICLE_FETCH_FAILED");
     }
 
-    throw new Error("Не удалось загрузить страницу. Проверьте URL и доступность сайта.");
+    throw new AppError("ARTICLE_FETCH_FAILED");
   }
 
   if (!response.ok) {
-    throw new Error(`Не удалось загрузить страницу (${response.status})`);
+    throw new AppError("ARTICLE_FETCH_FAILED");
   }
 
   const html = await response.text();
@@ -175,11 +177,11 @@ export async function fetchAndParseArticle(url: string): Promise<ParsedArticle> 
   };
 
   if (!parsed.content?.trim()) {
-    throw new Error("Не удалось извлечь текст статьи");
+    throw new AppError("ARTICLE_PARSE_FAILED");
   }
 
   if (!parsed.title && !parsed.content) {
-    throw new Error("Не удалось извлечь заголовок и содержимое статьи");
+    throw new AppError("ARTICLE_PARSE_FAILED");
   }
 
   return parsed;

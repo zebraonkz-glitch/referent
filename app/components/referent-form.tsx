@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { ErrorAlert } from "@/components/error-alert";
+import type { AppErrorResponse, ErrorCode } from "@/lib/app-error";
+import { getErrorMessage } from "@/lib/app-error";
+
 type Action = "summary" | "theses" | "telegram" | "translate";
 
 type ResultMode = "generated" | "translation";
@@ -9,7 +13,7 @@ type ResultMode = "generated" | "translation";
 type AnalyzeResponse = {
   result?: string;
   mode?: ResultMode;
-  error?: string;
+  error?: AppErrorResponse;
 };
 
 const actions: {
@@ -51,12 +55,19 @@ const processTexts: Record<Action, string> = {
   translate: "Перевожу статью…",
 };
 
+function resolveClientError(code: ErrorCode): AppErrorResponse {
+  return {
+    code,
+    message: getErrorMessage(code),
+  };
+}
+
 export function ReferentForm() {
   const [url, setUrl] = useState("");
   const [activeAction, setActiveAction] = useState<Action | null>(null);
   const [resultText, setResultText] = useState("");
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<AppErrorResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [processStatus, setProcessStatus] = useState<string | null>(null);
 
@@ -78,7 +89,7 @@ export function ReferentForm() {
     const trimmedUrl = url.trim();
 
     if (!trimmedUrl) {
-      setError("Введите URL англоязычной статьи");
+      setError(resolveClientError("MISSING_URL"));
       setResultText("");
       setResultMode(null);
       return;
@@ -87,13 +98,13 @@ export function ReferentForm() {
     try {
       new URL(trimmedUrl);
     } catch {
-      setError("Укажите корректный URL, например https://example.com/article");
+      setError(resolveClientError("INVALID_URL"));
       setResultText("");
       setResultMode(null);
       return;
     }
 
-    setError("");
+    setError(null);
     setActiveAction(action);
     setIsLoading(true);
     setResultText("");
@@ -109,17 +120,23 @@ export function ReferentForm() {
       const data = (await response.json()) as AnalyzeResponse;
 
       if (!response.ok) {
-        throw new Error(data.error ?? "Не удалось обработать статью");
+        if (data.error?.code && data.error?.message) {
+          setError(data.error);
+        } else {
+          setError(resolveClientError("UNKNOWN"));
+        }
+        return;
       }
 
       if (!data.result || (data.mode !== "generated" && data.mode !== "translation")) {
-        throw new Error("Сервер не вернул результат");
+        setError(resolveClientError("UNKNOWN"));
+        return;
       }
 
       setResultMode(data.mode);
       setResultText(data.result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Произошла ошибка");
+    } catch {
+      setError(resolveClientError("UNKNOWN"));
       setResultText("");
       setResultMode(null);
     } finally {
@@ -177,13 +194,9 @@ export function ReferentForm() {
             </button>
           ))}
         </div>
-
-        {error ? (
-          <p className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {error}
-          </p>
-        ) : null}
       </section>
+
+      {error ? <ErrorAlert code={error.code} message={error.message} /> : null}
 
       {processStatus ? (
         <div className="flex items-center gap-3 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-200">

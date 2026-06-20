@@ -1,11 +1,12 @@
 import type { ParsedArticle } from "@/lib/parse-article";
+import { AppError } from "@/lib/app-error";
 import { buildArticlePrompt, callOpenRouter } from "@/lib/openrouter";
 
 export async function translateArticle(article: ParsedArticle): Promise<string> {
   const articleText = buildArticlePrompt(article);
 
   if (!articleText.trim()) {
-    throw new Error("Не удалось извлечь текст статьи");
+    throw new AppError("ARTICLE_PARSE_FAILED");
   }
 
   return callOpenRouter([

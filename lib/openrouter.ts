@@ -1,4 +1,5 @@
 import type { ParsedArticle } from "@/lib/parse-article";
+import { AppError } from "@/lib/app-error";
 
 export const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-chat";
 export const MAX_ARTICLE_CHARS = 20_000;
@@ -40,9 +41,7 @@ function getOpenRouterConfig() {
   const apiKey = readEnv("OPENROUTER_API_KEY");
 
   if (!apiKey) {
-    throw new Error(
-      "OPENROUTER_API_KEY не настроен. Добавьте ключ в .env.local или переменные окружения Vercel.",
-    );
+    throw new AppError("AI_CONFIG_ERROR");
   }
 
   const baseUrl =
@@ -67,38 +66,30 @@ function truncateContent(content: string, maxChars: number): string {
   return `${cut}\n\n[... текст статьи обрезан ...]`;
 }
 
-function mapOpenRouterError(status: number, message?: string): string {
-  if (status === 401) {
-    return "Неверный API-ключ OpenRouter. Проверьте OPENROUTER_API_KEY в .env.local.";
-  }
-
-  if (status === 402) {
-    return "Недостаточно средств на балансе OpenRouter.";
+function mapOpenRouterStatus(status: number): AppError {
+  if (status === 401 || status === 402) {
+    return new AppError("AI_CONFIG_ERROR");
   }
 
   if (status === 429) {
-    return "Превышен лимит запросов к OpenRouter. Попробуйте через минуту.";
+    return new AppError("AI_RATE_LIMIT");
   }
 
   if (status >= 500) {
-    return "Сервис OpenRouter временно недоступен. Попробуйте позже.";
+    return new AppError("AI_UNAVAILABLE");
   }
 
-  return message ?? `OpenRouter вернул ошибку (${status})`;
+  return new AppError("AI_UNAVAILABLE");
 }
 
-function mapFetchError(error: unknown): string {
+function mapFetchError(error: unknown): AppError {
   if (error instanceof Error) {
     if (error.name === "AbortError" || error.name === "TimeoutError") {
-      return `Превышено время ожидания ответа от AI (${OPENROUTER_TIMEOUT_MS / 1000} с)`;
-    }
-
-    if (error.message.includes("fetch failed")) {
-      return "Не удалось связаться с OpenRouter. Проверьте интернет-соединение.";
+      return new AppError("AI_TIMEOUT");
     }
   }
 
-  return "Не удалось выполнить запрос к OpenRouter";
+  return new AppError("AI_UNAVAILABLE");
 }
 
 export function buildArticlePrompt(article: ParsedArticle): string {
@@ -138,7 +129,7 @@ export async function callOpenRouter(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    throw new Error(mapFetchError(error));
+    throw mapFetchError(error);
   }
 
   let data: ChatCompletionResponse;
@@ -146,21 +137,17 @@ export async function callOpenRouter(
   try {
     data = (await response.json()) as ChatCompletionResponse;
   } catch {
-    throw new Error(
-      response.ok
-        ? "OpenRouter вернул некорректный ответ"
-        : mapOpenRouterError(response.status),
-    );
+    throw mapOpenRouterStatus(response.status);
   }
 
   if (!response.ok) {
-    throw new Error(mapOpenRouterError(response.status, data.error?.message));
+    throw mapOpenRouterStatus(response.status);
   }
 
   const content = data.choices?.[0]?.message?.content?.trim();
 
   if (!content) {
-    throw new Error("Модель не вернула ответ");
+    throw new AppError("AI_UNAVAILABLE");
   }
 
   return content;

@@ -1,4 +1,5 @@
 import { generateArticleAction } from "@/lib/generate-article-action";
+import { AppError, isAppError, type AppErrorResponse } from "@/lib/app-error";
 import { fetchAndParseArticle } from "@/lib/parse-article";
 import { translateArticle } from "@/lib/translate-article";
 import { NextRequest, NextResponse } from "next/server";
@@ -18,28 +19,33 @@ function isGeneratedAction(action: Action): action is (typeof generatedActions)[
   return generatedActions.includes(action as (typeof generatedActions)[number]);
 }
 
+function errorResponse(error: AppErrorResponse, status: number) {
+  return NextResponse.json({ error }, { status });
+}
+
 export async function POST(request: NextRequest) {
   let body: { url?: string; action?: Action };
 
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+    return errorResponse(new AppError("INVALID_REQUEST").toJSON(), 400);
   }
 
   const { url, action } = body;
 
-  if (!url || !action || !(action in actionTitles)) {
-    return NextResponse.json(
-      { error: "Укажите URL статьи и тип действия" },
-      { status: 400 },
-    );
+  if (!url?.trim()) {
+    return errorResponse(new AppError("MISSING_URL").toJSON(), 400);
+  }
+
+  if (!action || !(action in actionTitles)) {
+    return errorResponse(new AppError("INVALID_REQUEST").toJSON(), 400);
   }
 
   try {
     new URL(url);
   } catch {
-    return NextResponse.json({ error: "Некорректный URL" }, { status: 400 });
+    return errorResponse(new AppError("INVALID_URL").toJSON(), 400);
   }
 
   try {
@@ -67,14 +73,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(
-      { error: "Неизвестное действие" },
-      { status: 400 },
-    );
+    return errorResponse(new AppError("INVALID_REQUEST").toJSON(), 400);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Не удалось обработать статью";
+    if (isAppError(error)) {
+      return errorResponse(error.toJSON(), 422);
+    }
 
-    return NextResponse.json({ error: message }, { status: 422 });
+    return errorResponse(new AppError("UNKNOWN").toJSON(), 422);
   }
 }
