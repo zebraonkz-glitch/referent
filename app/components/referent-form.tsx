@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Action = "summary" | "theses" | "telegram" | "translate";
 
@@ -12,34 +12,43 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const actions: { id: Action; label: string; description: string }[] = [
+const actions: {
+  id: Action;
+  label: string;
+  description: string;
+  title: string;
+}[] = [
   {
     id: "summary",
     label: "О чем статья?",
     description: "Краткое описание содержания статьи",
+    title: "Кратко объяснить, о чём статья: тема, главная мысль и кому будет полезна",
   },
   {
     id: "theses",
     label: "Тезисы",
     description: "Основные тезисы и ключевые мысли",
+    title: "Выделить 5–10 ключевых тезисов и основных выводов из статьи",
   },
   {
     id: "telegram",
     label: "Пост для Telegram",
     description: "Готовый пост для публикации в Telegram",
+    title: "Подготовить короткий пост для Telegram со ссылкой на источник",
   },
   {
     id: "translate",
     label: "Перевод",
     description: "Перевод статьи на русский через DeepSeek",
+    title: "Перевести статью на русский язык с сохранением смысла и структуры",
   },
 ];
 
-const loadingTexts: Record<Action, string> = {
-  summary: "Анализируем статью...",
-  theses: "Формируем тезисы...",
-  telegram: "Готовим пост...",
-  translate: "Переводим статью...",
+const processTexts: Record<Action, string> = {
+  summary: "Анализирую статью…",
+  theses: "Формирую тезисы…",
+  telegram: "Готовлю пост…",
+  translate: "Перевожу статью…",
 };
 
 export function ReferentForm() {
@@ -49,6 +58,21 @@ export function ReferentForm() {
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [processStatus, setProcessStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading || !activeAction) {
+      return;
+    }
+
+    setProcessStatus("Загружаю статью…");
+
+    const timer = window.setTimeout(() => {
+      setProcessStatus(processTexts[activeAction]);
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, [isLoading, activeAction]);
 
   async function handleAction(action: Action) {
     const trimmedUrl = url.trim();
@@ -100,11 +124,11 @@ export function ReferentForm() {
       setResultMode(null);
     } finally {
       setIsLoading(false);
+      setProcessStatus(null);
     }
   }
 
   const activeLabel = actions.find((item) => item.id === activeAction)?.label;
-  const loadingText = activeAction ? loadingTexts[activeAction] : "Обрабатываем...";
   const hasTextResult =
     (resultMode === "generated" || resultMode === "translation") && resultText;
 
@@ -131,15 +155,19 @@ export function ReferentForm() {
           type="url"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          placeholder="https://example.com/article"
+          placeholder="Введите URL статьи, например: https://example.com/article"
           className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30"
         />
+        <p className="mt-2 text-xs text-slate-500">
+          Укажите ссылку на англоязычную статью
+        </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {actions.map((action) => (
             <button
               key={action.id}
               type="button"
+              title={action.title}
               onClick={() => handleAction(action.id)}
               disabled={isLoading}
               className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left transition hover:border-sky-500 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
@@ -157,6 +185,13 @@ export function ReferentForm() {
         ) : null}
       </section>
 
+      {processStatus ? (
+        <div className="flex items-center gap-3 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-200">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-sky-500/30 border-t-sky-400" />
+          <span>{processStatus}</span>
+        </div>
+      ) : null}
+
       <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-black/20 backdrop-blur">
         <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="text-lg font-medium text-slate-100">Результат</h2>
@@ -168,12 +203,7 @@ export function ReferentForm() {
         </div>
 
         <div className="min-h-48 rounded-xl border border-dashed border-slate-700 bg-slate-950/80 p-5">
-          {isLoading ? (
-            <div className="flex h-full min-h-36 flex-col items-center justify-center gap-3 text-slate-400">
-              <span className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400" />
-              <p>{loadingText}</p>
-            </div>
-          ) : hasTextResult ? (
+          {hasTextResult ? (
             <div className="whitespace-pre-wrap text-sm leading-7 text-slate-200">
               {resultText}
             </div>
