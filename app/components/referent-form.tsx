@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorAlert } from "@/components/error-alert";
 import type { AppErrorResponse, ErrorCode } from "@/lib/app-error";
 import { getErrorMessage } from "@/lib/app-error";
+import { addRecentUrl, loadRecentUrls } from "@/lib/recent-urls";
 import { cn } from "@/lib/utils";
 
 type Action = "summary" | "theses" | "telegram" | "translate";
@@ -73,10 +74,15 @@ export function ReferentForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [processStatus, setProcessStatus] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [recentUrls, setRecentUrls] = useState<string[]>([]);
 
   const resultSectionRef = useRef<HTMLElement>(null);
   const requestIdRef = useRef(0);
   const shouldScrollRef = useRef(false);
+
+  useEffect(() => {
+    setRecentUrls(loadRecentUrls());
+  }, []);
 
   useEffect(() => {
     if (!isLoading || !activeAction) {
@@ -161,6 +167,8 @@ export function ReferentForm() {
     }
 
     const requestId = ++requestIdRef.current;
+
+    setRecentUrls((current) => addRecentUrl(trimmedUrl, current));
 
     setError(null);
     setActiveAction(action);
@@ -257,6 +265,31 @@ export function ReferentForm() {
             Очистить
           </button>
         </div>
+
+        {recentUrls.length > 0 ? (
+          <div className="mt-3">
+            <p className="mb-2 text-xs font-medium text-slate-400">Недавние запросы</p>
+            <ul className="flex flex-col gap-1.5">
+              {recentUrls.map((recentUrl) => (
+                <li key={recentUrl}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUrl(recentUrl);
+                      setError(null);
+                    }}
+                    disabled={isLoading}
+                    title={recentUrl}
+                    className="w-full truncate rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-left text-xs text-slate-300 transition hover:border-sky-500/50 hover:bg-slate-900 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                  >
+                    {recentUrl}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <p className="mt-2 text-xs text-slate-500">
           Укажите ссылку на англоязычную статью
         </p>
