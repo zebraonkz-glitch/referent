@@ -237,14 +237,26 @@ export function ReferentForm() {
         <label htmlFor="article-url" className="mb-2 block text-sm font-medium text-slate-300">
           URL англоязычной статьи
         </label>
-        <input
-          id="article-url"
-          type="url"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          placeholder="Введите URL статьи, например: https://example.com/article"
-          className="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 sm:text-base"
-        />
+        <div className="flex gap-2">
+          <input
+            id="article-url"
+            type="url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="Введите URL статьи, например: https://example.com/article"
+            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 sm:text-base"
+          />
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={isLoading}
+            title="Очистить форму и результаты"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-900 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            Очистить
+          </button>
+        </div>
         <p className="mt-2 text-xs text-slate-500">
           Укажите ссылку на англоязычную статью
         </p>
@@ -263,18 +275,6 @@ export function ReferentForm() {
               <span className="mt-1 block text-sm text-slate-400">{action.description}</span>
             </button>
           ))}
-        </div>
-
-        <div className="mt-4 flex justify-stretch sm:justify-end">
-          <button
-            type="button"
-            onClick={handleClear}
-            disabled={isLoading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-900 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-          >
-            <RotateCcw className="h-4 w-4 shrink-0" />
-            Очистить
-          </button>
         </div>
       </section>
 
