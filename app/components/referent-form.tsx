@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, RotateCcw } from "lucide-react";
+import { Check, Copy, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { ErrorAlert } from "@/components/error-alert";
@@ -9,19 +9,27 @@ import { getErrorMessage } from "@/lib/app-error";
 import { addRecentUrl, loadRecentUrls } from "@/lib/recent-urls";
 import { cn } from "@/lib/utils";
 
-type Action = "summary" | "theses" | "telegram" | "illustration";
+type Action = "summary" | "theses" | "telegram" | "illustration" | "publication";
 
-type ResultMode = "generated" | "illustration";
+type ResultMode = "generated" | "illustration" | "publication";
 
 type AnalyzeResponse = {
   result?: string;
+  illustrationUrl?: string;
   imagePrompt?: string;
   mode?: ResultMode;
   error?: AppErrorResponse;
 };
 
+const comboAction = {
+  id: "publication" as const,
+  label: "Подготовить публикацию",
+  description: "Пост для Telegram и иллюстрация за один запрос",
+  title: "Сгенерировать пост для Telegram и иллюстрацию по статье",
+};
+
 const actions: {
-  id: Action;
+  id: Exclude<Action, "publication">;
   label: string;
   description: string;
   title: string;
@@ -57,9 +65,11 @@ const processTexts: Record<Action, string> = {
   theses: "Формирую тезисы…",
   telegram: "Готовлю пост…",
   illustration: "Создаю промпт для иллюстрации…",
+  publication: "Готовлю пост для Telegram…",
 };
 
-const illustrationProcessTexts = [
+const publicationProcessTexts = [
+  "Готовлю пост для Telegram…",
   "Создаю промпт для иллюстрации…",
   "Генерирую изображение…",
 ];
@@ -103,18 +113,30 @@ export function ReferentForm() {
       setProcessStatus(processTexts[activeAction]);
     }, 1500);
 
-    let secondTimer: number | undefined;
+    const timers: number[] = [firstTimer];
 
     if (activeAction === "illustration") {
-      secondTimer = window.setTimeout(() => {
-        setProcessStatus(illustrationProcessTexts[1]);
-      }, 8000);
+      timers.push(
+        window.setTimeout(() => {
+          setProcessStatus("Генерирую изображение…");
+        }, 8000),
+      );
+    }
+
+    if (activeAction === "publication") {
+      timers.push(
+        window.setTimeout(() => {
+          setProcessStatus(publicationProcessTexts[1]);
+        }, 6000),
+        window.setTimeout(() => {
+          setProcessStatus(publicationProcessTexts[2]);
+        }, 14000),
+      );
     }
 
     return () => {
-      window.clearTimeout(firstTimer);
-      if (secondTimer !== undefined) {
-        window.clearTimeout(secondTimer);
+      for (const timer of timers) {
+        window.clearTimeout(timer);
       }
     };
   }, [isLoading, activeAction]);
@@ -122,7 +144,8 @@ export function ReferentForm() {
   useEffect(() => {
     const hasResult =
       (resultMode === "generated" && resultText) ||
-      (resultMode === "illustration" && illustrationUrl);
+      (resultMode === "illustration" && illustrationUrl) ||
+      (resultMode === "publication" && resultText && illustrationUrl);
 
     if (!shouldScrollRef.current || !hasResult || !resultSectionRef.current) {
       return;
@@ -145,16 +168,20 @@ export function ReferentForm() {
     return () => window.clearTimeout(timer);
   }, [copied]);
 
+  function resetResults() {
+    setResultText("");
+    setIllustrationUrl("");
+    setImagePrompt("");
+    setResultMode(null);
+  }
+
   function handleClear() {
     requestIdRef.current += 1;
     shouldScrollRef.current = false;
 
     setUrl("");
     setActiveAction(null);
-    setResultText("");
-    setIllustrationUrl("");
-    setImagePrompt("");
-    setResultMode(null);
+    resetResults();
     setError(null);
     setIsLoading(false);
     setProcessStatus(null);
@@ -162,7 +189,8 @@ export function ReferentForm() {
   }
 
   async function handleCopy() {
-    const textToCopy = resultMode === "illustration" ? imagePrompt : resultText;
+    const textToCopy =
+      resultMode === "illustration" ? imagePrompt : resultText;
 
     if (!textToCopy) {
       return;
@@ -181,10 +209,7 @@ export function ReferentForm() {
 
     if (!trimmedUrl) {
       setError(resolveClientError("MISSING_URL"));
-      setResultText("");
-      setIllustrationUrl("");
-      setImagePrompt("");
-      setResultMode(null);
+      resetResults();
       return;
     }
 
@@ -192,10 +217,7 @@ export function ReferentForm() {
       new URL(trimmedUrl);
     } catch {
       setError(resolveClientError("INVALID_URL"));
-      setResultText("");
-      setIllustrationUrl("");
-      setImagePrompt("");
-      setResultMode(null);
+      resetResults();
       return;
     }
 
@@ -206,10 +228,7 @@ export function ReferentForm() {
     setError(null);
     setActiveAction(action);
     setIsLoading(true);
-    setResultText("");
-    setIllustrationUrl("");
-    setImagePrompt("");
-    setResultMode(null);
+    resetResults();
     setCopied(false);
 
     try {
@@ -234,30 +253,48 @@ export function ReferentForm() {
         return;
       }
 
-      if (!data.result || (data.mode !== "generated" && data.mode !== "illustration")) {
-        setError(resolveClientError("UNKNOWN"));
+      if (data.mode === "publication") {
+        if (!data.result || !data.illustrationUrl) {
+          setError(resolveClientError("UNKNOWN"));
+          return;
+        }
+
+        shouldScrollRef.current = true;
+        setResultMode("publication");
+        setResultText(data.result);
+        setIllustrationUrl(data.illustrationUrl);
+        setImagePrompt(data.imagePrompt ?? "");
         return;
       }
 
-      shouldScrollRef.current = true;
-      setResultMode(data.mode);
-
       if (data.mode === "illustration") {
+        if (!data.result) {
+          setError(resolveClientError("UNKNOWN"));
+          return;
+        }
+
+        shouldScrollRef.current = true;
+        setResultMode("illustration");
         setIllustrationUrl(data.result);
         setImagePrompt(data.imagePrompt ?? "");
-      } else {
-        setResultText(data.result);
+        return;
       }
+
+      if (data.mode === "generated" && data.result) {
+        shouldScrollRef.current = true;
+        setResultMode("generated");
+        setResultText(data.result);
+        return;
+      }
+
+      setError(resolveClientError("UNKNOWN"));
     } catch {
       if (requestId !== requestIdRef.current) {
         return;
       }
 
       setError(resolveClientError("UNKNOWN"));
-      setResultText("");
-      setIllustrationUrl("");
-      setImagePrompt("");
-      setResultMode(null);
+      resetResults();
     } finally {
       if (requestId === requestIdRef.current) {
         setIsLoading(false);
@@ -266,11 +303,19 @@ export function ReferentForm() {
     }
   }
 
-  const activeLabel = actions.find((item) => item.id === activeAction)?.label;
+  const activeLabel =
+    activeAction === "publication"
+      ? comboAction.label
+      : actions.find((item) => item.id === activeAction)?.label;
+
   const hasTextResult = resultMode === "generated" && resultText;
   const hasIllustrationResult = resultMode === "illustration" && illustrationUrl;
+  const hasPublicationResult =
+    resultMode === "publication" && resultText && illustrationUrl;
   const hasCopyableResult =
-    (hasTextResult && resultText) || (hasIllustrationResult && imagePrompt);
+    (hasTextResult && resultText) ||
+    (hasPublicationResult && resultText) ||
+    (hasIllustrationResult && imagePrompt);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 sm:gap-8">
@@ -339,7 +384,21 @@ export function ReferentForm() {
           Укажите ссылку на англоязычную статью
         </p>
 
-        <div className="mt-6 flex flex-col gap-3 md:grid md:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          title={comboAction.title}
+          onClick={() => handleAction(comboAction.id)}
+          disabled={isLoading}
+          className="mt-6 w-full rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-4 text-left transition hover:border-sky-400 hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="flex items-center gap-2 font-medium text-sky-100">
+            <Sparkles className="h-4 w-4 shrink-0" />
+            {comboAction.label}
+          </span>
+          <span className="mt-1 block text-sm text-sky-200/70">{comboAction.description}</span>
+        </button>
+
+        <div className="mt-3 flex flex-col gap-3 md:grid md:grid-cols-2 xl:grid-cols-4">
           {actions.map((action) => (
             <button
               key={action.id}
@@ -398,7 +457,7 @@ export function ReferentForm() {
               ) : (
                 <>
                   <Copy className="h-4 w-4 shrink-0" />
-                  {resultMode === "illustration" ? "Копировать промпт" : "Копировать"}
+                  {resultMode === "illustration" ? "Копировать промпт" : "Копировать пост"}
                 </>
               )}
             </button>
@@ -406,7 +465,31 @@ export function ReferentForm() {
         </div>
 
         <div className="min-h-48 rounded-xl border border-dashed border-slate-700 bg-slate-950/80 p-4 sm:p-5">
-          {hasTextResult ? (
+          {hasPublicationResult ? (
+            <div className="space-y-6">
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-slate-300">Пост для Telegram</h3>
+                <div className="overflow-x-auto whitespace-pre-wrap break-words text-sm leading-7 text-slate-200">
+                  {resultText}
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-slate-300">Иллюстрация</h3>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={illustrationUrl}
+                  alt="Иллюстрация для публикации"
+                  className="mx-auto max-h-[480px] w-full rounded-lg object-contain"
+                />
+                {imagePrompt ? (
+                  <p className="mt-3 text-sm leading-6 text-slate-400">
+                    <span className="font-medium text-slate-300">Промпт: </span>
+                    {imagePrompt}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : hasTextResult ? (
             <div className="overflow-x-auto whitespace-pre-wrap break-words text-sm leading-7 text-slate-200">
               {resultText}
             </div>
@@ -428,7 +511,7 @@ export function ReferentForm() {
           ) : (
             <p className="text-sm leading-7 break-words text-slate-500">
               Введите URL и нажмите кнопку — здесь появится описание статьи, тезисы,
-              пост для Telegram или иллюстрация.
+              пост для Telegram, иллюстрация или готовая публикация.
             </p>
           )}
         </div>

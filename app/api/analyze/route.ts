@@ -1,16 +1,18 @@
 import { generateArticleAction } from "@/lib/generate-article-action";
 import { generateArticleIllustration } from "@/lib/generate-article-illustration";
+import { generateArticlePublication } from "@/lib/generate-article-publication";
 import { AppError, isAppError, type AppErrorResponse } from "@/lib/app-error";
 import { fetchAndParseArticle } from "@/lib/parse-article";
 import { NextRequest, NextResponse } from "next/server";
 
-type Action = "summary" | "theses" | "telegram" | "illustration";
+type Action = "summary" | "theses" | "telegram" | "illustration" | "publication";
 
 const actionTitles: Record<Action, string> = {
   summary: "О чем статья?",
   theses: "Тезисы",
   telegram: "Пост для Telegram",
   illustration: "Иллюстрация",
+  publication: "Подготовить публикацию",
 };
 
 const generatedActions = ["summary", "theses", "telegram"] as const;
@@ -50,6 +52,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const parsed = await fetchAndParseArticle(url);
+
+    if (action === "publication") {
+      const { telegramPost, imagePrompt, illustrationUrl } =
+        await generateArticlePublication(parsed, url);
+
+      return NextResponse.json({
+        result: telegramPost,
+        illustrationUrl,
+        imagePrompt,
+        mode: "publication",
+        action: actionTitles[action],
+      });
+    }
 
     if (action === "illustration") {
       const { imagePrompt, dataUrl } = await generateArticleIllustration(parsed);
