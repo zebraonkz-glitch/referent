@@ -1,16 +1,16 @@
 import { generateArticleAction } from "@/lib/generate-article-action";
+import { generateArticleIllustration } from "@/lib/generate-article-illustration";
 import { AppError, isAppError, type AppErrorResponse } from "@/lib/app-error";
 import { fetchAndParseArticle } from "@/lib/parse-article";
-import { translateArticle } from "@/lib/translate-article";
 import { NextRequest, NextResponse } from "next/server";
 
-type Action = "summary" | "theses" | "telegram" | "translate";
+type Action = "summary" | "theses" | "telegram" | "illustration";
 
 const actionTitles: Record<Action, string> = {
   summary: "О чем статья?",
   theses: "Тезисы",
   telegram: "Пост для Telegram",
-  translate: "Перевод",
+  illustration: "Иллюстрация",
 };
 
 const generatedActions = ["summary", "theses", "telegram"] as const;
@@ -51,12 +51,13 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = await fetchAndParseArticle(url);
 
-    if (action === "translate") {
-      const translation = await translateArticle(parsed);
+    if (action === "illustration") {
+      const { imagePrompt, dataUrl } = await generateArticleIllustration(parsed);
 
       return NextResponse.json({
-        result: translation,
-        mode: "translation",
+        result: dataUrl,
+        imagePrompt,
+        mode: "illustration",
         action: actionTitles[action],
       });
     }

@@ -9,12 +9,13 @@ import { getErrorMessage } from "@/lib/app-error";
 import { addRecentUrl, loadRecentUrls } from "@/lib/recent-urls";
 import { cn } from "@/lib/utils";
 
-type Action = "summary" | "theses" | "telegram" | "translate";
+type Action = "summary" | "theses" | "telegram" | "illustration";
 
-type ResultMode = "generated" | "translation";
+type ResultMode = "generated" | "illustration";
 
 type AnalyzeResponse = {
   result?: string;
+  imagePrompt?: string;
   mode?: ResultMode;
   error?: AppErrorResponse;
 };
@@ -44,10 +45,10 @@ const actions: {
     title: "Подготовить короткий пост для Telegram со ссылкой на источник",
   },
   {
-    id: "translate",
-    label: "Перевод",
-    description: "Перевод статьи на русский через DeepSeek",
-    title: "Перевести статью на русский язык с сохранением смысла и структуры",
+    id: "illustration",
+    label: "Иллюстрация",
+    description: "Изображение по теме статьи через Hugging Face",
+    title: "Создать промпт по статье и сгенерировать иллюстрацию",
   },
 ];
 
@@ -55,8 +56,13 @@ const processTexts: Record<Action, string> = {
   summary: "Анализирую статью…",
   theses: "Формирую тезисы…",
   telegram: "Готовлю пост…",
-  translate: "Перевожу статью…",
+  illustration: "Создаю промпт для иллюстрации…",
 };
+
+const illustrationProcessTexts = [
+  "Создаю промпт для иллюстрации…",
+  "Генерирую изображение…",
+];
 
 function resolveClientError(code: ErrorCode): AppErrorResponse {
   return {
@@ -69,6 +75,8 @@ export function ReferentForm() {
   const [url, setUrl] = useState("");
   const [activeAction, setActiveAction] = useState<Action | null>(null);
   const [resultText, setResultText] = useState("");
+  const [illustrationUrl, setIllustrationUrl] = useState("");
+  const [imagePrompt, setImagePrompt] = useState("");
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [error, setError] = useState<AppErrorResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,15 +99,32 @@ export function ReferentForm() {
 
     setProcessStatus("Загружаю статью…");
 
-    const timer = window.setTimeout(() => {
+    const firstTimer = window.setTimeout(() => {
       setProcessStatus(processTexts[activeAction]);
     }, 1500);
 
-    return () => window.clearTimeout(timer);
+    let secondTimer: number | undefined;
+
+    if (activeAction === "illustration") {
+      secondTimer = window.setTimeout(() => {
+        setProcessStatus(illustrationProcessTexts[1]);
+      }, 8000);
+    }
+
+    return () => {
+      window.clearTimeout(firstTimer);
+      if (secondTimer !== undefined) {
+        window.clearTimeout(secondTimer);
+      }
+    };
   }, [isLoading, activeAction]);
 
   useEffect(() => {
-    if (!shouldScrollRef.current || !resultText || !resultSectionRef.current) {
+    const hasResult =
+      (resultMode === "generated" && resultText) ||
+      (resultMode === "illustration" && illustrationUrl);
+
+    if (!shouldScrollRef.current || !hasResult || !resultSectionRef.current) {
       return;
     }
 
@@ -109,7 +134,7 @@ export function ReferentForm() {
       behavior: "smooth",
       block: "start",
     });
-  }, [resultText]);
+  }, [resultText, illustrationUrl, resultMode]);
 
   useEffect(() => {
     if (!copied) {
@@ -127,6 +152,8 @@ export function ReferentForm() {
     setUrl("");
     setActiveAction(null);
     setResultText("");
+    setIllustrationUrl("");
+    setImagePrompt("");
     setResultMode(null);
     setError(null);
     setIsLoading(false);
@@ -135,12 +162,14 @@ export function ReferentForm() {
   }
 
   async function handleCopy() {
-    if (!resultText) {
+    const textToCopy = resultMode === "illustration" ? imagePrompt : resultText;
+
+    if (!textToCopy) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(resultText);
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
     } catch {
       setError(resolveClientError("UNKNOWN"));
@@ -153,6 +182,8 @@ export function ReferentForm() {
     if (!trimmedUrl) {
       setError(resolveClientError("MISSING_URL"));
       setResultText("");
+      setIllustrationUrl("");
+      setImagePrompt("");
       setResultMode(null);
       return;
     }
@@ -162,6 +193,8 @@ export function ReferentForm() {
     } catch {
       setError(resolveClientError("INVALID_URL"));
       setResultText("");
+      setIllustrationUrl("");
+      setImagePrompt("");
       setResultMode(null);
       return;
     }
@@ -174,6 +207,8 @@ export function ReferentForm() {
     setActiveAction(action);
     setIsLoading(true);
     setResultText("");
+    setIllustrationUrl("");
+    setImagePrompt("");
     setResultMode(null);
     setCopied(false);
 
@@ -199,14 +234,20 @@ export function ReferentForm() {
         return;
       }
 
-      if (!data.result || (data.mode !== "generated" && data.mode !== "translation")) {
+      if (!data.result || (data.mode !== "generated" && data.mode !== "illustration")) {
         setError(resolveClientError("UNKNOWN"));
         return;
       }
 
       shouldScrollRef.current = true;
       setResultMode(data.mode);
-      setResultText(data.result);
+
+      if (data.mode === "illustration") {
+        setIllustrationUrl(data.result);
+        setImagePrompt(data.imagePrompt ?? "");
+      } else {
+        setResultText(data.result);
+      }
     } catch {
       if (requestId !== requestIdRef.current) {
         return;
@@ -214,6 +255,8 @@ export function ReferentForm() {
 
       setError(resolveClientError("UNKNOWN"));
       setResultText("");
+      setIllustrationUrl("");
+      setImagePrompt("");
       setResultMode(null);
     } finally {
       if (requestId === requestIdRef.current) {
@@ -224,8 +267,10 @@ export function ReferentForm() {
   }
 
   const activeLabel = actions.find((item) => item.id === activeAction)?.label;
-  const hasTextResult =
-    (resultMode === "generated" || resultMode === "translation") && resultText;
+  const hasTextResult = resultMode === "generated" && resultText;
+  const hasIllustrationResult = resultMode === "illustration" && illustrationUrl;
+  const hasCopyableResult =
+    (hasTextResult && resultText) || (hasIllustrationResult && imagePrompt);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 sm:gap-8">
@@ -334,7 +379,7 @@ export function ReferentForm() {
             ) : null}
           </div>
 
-          {hasTextResult ? (
+          {hasCopyableResult ? (
             <button
               type="button"
               onClick={handleCopy}
@@ -353,7 +398,7 @@ export function ReferentForm() {
               ) : (
                 <>
                   <Copy className="h-4 w-4 shrink-0" />
-                  Копировать
+                  {resultMode === "illustration" ? "Копировать промпт" : "Копировать"}
                 </>
               )}
             </button>
@@ -365,10 +410,25 @@ export function ReferentForm() {
             <div className="overflow-x-auto whitespace-pre-wrap break-words text-sm leading-7 text-slate-200">
               {resultText}
             </div>
+          ) : hasIllustrationResult ? (
+            <div className="space-y-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={illustrationUrl}
+                alt="Иллюстрация по теме статьи"
+                className="mx-auto max-h-[480px] w-full rounded-lg object-contain"
+              />
+              {imagePrompt ? (
+                <p className="text-sm leading-6 text-slate-400">
+                  <span className="font-medium text-slate-300">Промпт: </span>
+                  {imagePrompt}
+                </p>
+              ) : null}
+            </div>
           ) : (
             <p className="text-sm leading-7 break-words text-slate-500">
               Введите URL и нажмите кнопку — здесь появится описание статьи, тезисы,
-              пост для Telegram или перевод.
+              пост для Telegram или иллюстрация.
             </p>
           )}
         </div>

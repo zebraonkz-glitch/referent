@@ -5,6 +5,9 @@ export type ErrorCode =
   | "AI_TIMEOUT"
   | "AI_RATE_LIMIT"
   | "AI_CONFIG_ERROR"
+  | "IMAGE_CONFIG_ERROR"
+  | "IMAGE_UNAVAILABLE"
+  | "IMAGE_TIMEOUT"
   | "INVALID_URL"
   | "MISSING_URL"
   | "INVALID_REQUEST"
@@ -18,6 +21,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   AI_TIMEOUT: "AI не успел обработать статью. Попробуйте ещё раз или выберите более короткую статью.",
   AI_RATE_LIMIT: "Слишком много запросов. Подождите минуту и попробуйте снова.",
   AI_CONFIG_ERROR: "AI не настроен. Обратитесь к администратору приложения.",
+  IMAGE_CONFIG_ERROR: "Генерация изображений не настроена. Добавьте HUGGINGFACE_API_KEY.",
+  IMAGE_UNAVAILABLE: "Не удалось сгенерировать изображение. Попробуйте позже.",
+  IMAGE_TIMEOUT: "Генерация изображения заняла слишком много времени. Попробуйте ещё раз.",
   INVALID_URL: "Укажите корректную ссылку, например: https://example.com/article",
   MISSING_URL: "Введите URL англоязычной статьи.",
   INVALID_REQUEST: "Некорректный запрос. Обновите страницу и попробуйте снова.",
